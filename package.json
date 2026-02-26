@@ -1,0 +1,26 @@
+{
+  "name": "odoo-checador",
+  "version": "1.0.0",
+  "description": "ZKTeco F22ID → Odoo 17 Attendance Sync Service",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "keywords": [
+    "zkteco",
+    "odoo",
+    "attendance",
+    "sync"
+  ],
+  "license": "UNLICENSED",
+  "dependencies": {
+    "axios": "^1.7.0",
+    "better-sqlite3": "^11.0.0",
+    "dotenv": "^16.4.0",
+    "node-cron": "^3.0.3",
+    "winston": "^3.13.0",
+    "xmlrpc": "^1.3.2",
+    "zkteco-js": "^1.1.0"
+  }
+}

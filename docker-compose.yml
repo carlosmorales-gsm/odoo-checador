@@ -1,0 +1,12 @@
+services:
+  checador-sync:
+    build: .
+    env_file: .env
+    ports:
+      - "${HEALTH_PORT:-3000}:3000"
+    volumes:
+      - sync-data:/data
+    restart: unless-stopped
+
+volumes:
+  sync-data:
