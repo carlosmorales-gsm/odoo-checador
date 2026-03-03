@@ -9,9 +9,10 @@ const logger = winston.createLogger({ defaultMeta: { service: 'sync' } });
 logger.add(new winston.transports.Console({ format: winston.format.simple() }));
 
 function toUTC(localDateStr, timezone) {
-  // localDateStr comes from ZKTeco as "YYYY-MM-DD HH:mm:ss" in device-local time
-  const localDate = new Date(localDateStr.replace(' ', 'T'));
-  // Build an Intl formatter to find the offset
+  // localDateStr comes from ZKTeco as "YYYY-MM-DD HH:mm:ss" in device-local time.
+  // Append 'Z' to treat the string as an anchor in UTC for offset calculation.
+  const anchor = new Date(localDateStr.replace(' ', 'T') + 'Z');
+
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric', month: '2-digit', day: '2-digit',
@@ -19,16 +20,18 @@ function toUTC(localDateStr, timezone) {
     hour12: false,
   });
 
-  // Calculate offset: interpret the string as local time in the given timezone
-  // We create a date in UTC that represents the same wall-clock time, then adjust
-  const parts = formatter.formatToParts(localDate);
+  const parts = formatter.formatToParts(anchor);
   const get = (type) => parts.find((p) => p.type === type)?.value;
-  const utcEquivalent = new Date(
+
+  // Reconstruct the timezone-shifted wall-clock time as a UTC Date to find the offset.
+  // For UTC-6: anchor=08:30Z → formatter shows 02:30 → tzDisplay=02:30Z → offsetMs=-6h
+  const tzDisplay = new Date(
     `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}Z`
   );
-  const offsetMs = utcEquivalent.getTime() - localDate.getTime();
+  const offsetMs = tzDisplay.getTime() - anchor.getTime();
 
-  const utcDate = new Date(localDate.getTime() + offsetMs);
+  // UTC = device_local_as_UTC - offsetMs → 08:30Z - (-6h) = 14:30Z
+  const utcDate = new Date(anchor.getTime() - offsetMs);
   return utcDate.toISOString().replace('T', ' ').substring(0, 19);
 }
 
@@ -62,15 +65,24 @@ async function syncDevice(device, odoo) {
   let processed = 0;
   let errors = 0;
   let latestTimestamp = lastSynced;
+  let encounteredError = false;
   // Cache employee lookups to avoid repeated Odoo calls
   const employeeCache = new Map();
 
   for (const log of newLogs) {
+    // Skip records already successfully synced (allows safe retries after partial failures)
+    if (stateDb.isAlreadySynced(device.ip, log.userId, log.timestamp)) {
+      if (!encounteredError && (!latestTimestamp || log.timestamp > latestTimestamp)) {
+        latestTimestamp = log.timestamp;
+      }
+      continue;
+    }
+
     try {
       // Look up employee
       let employee = employeeCache.get(log.userId);
       if (employee === undefined) {
-        employee = await odoo.getEmployeeByZktecoId(log.userId);
+        employee = await odoo.getEmployeeById(parseInt(log.userId, 10));
         employeeCache.set(log.userId, employee);
       }
 
@@ -104,12 +116,15 @@ async function syncDevice(device, odoo) {
       stateDb.logSync(device.ip, log.userId, log.timestamp, action, odooAttendanceId);
       processed++;
 
-      if (!latestTimestamp || log.timestamp > latestTimestamp) {
+      // Only advance the watermark if no error has been encountered yet.
+      // Freezing it ensures failed records are retried on the next cycle.
+      if (!encounteredError && (!latestTimestamp || log.timestamp > latestTimestamp)) {
         latestTimestamp = log.timestamp;
       }
     } catch (err) {
       logger.error(`Error syncing record ${log.userId}@${log.timestamp}: ${err.message}`);
       errors++;
+      encounteredError = true; // freeze watermark so failed records are retried
     }
   }
 

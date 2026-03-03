@@ -1,0 +1,13 @@
+diff --git a/node_modules/zkteco-js/src/ztcp.js b/node_modules/zkteco-js/src/ztcp.js
+index 5cd4a2f..65a44aa 100644
+--- a/node_modules/zkteco-js/src/ztcp.js
++++ b/node_modules/zkteco-js/src/ztcp.js
+@@ -326,7 +326,7 @@ class ZTCP {
+ 
+             } catch (err) {
+                 reject(err)
+-                console.log(reply)
++                return  // patch: prevent null-dereference on reply after rejection
+ 
+             }
+ 

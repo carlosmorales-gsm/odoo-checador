@@ -33,8 +33,11 @@ const config = {
     devices: parseDevices(required('ZKTECO_DEVICES')),
   },
   sync: {
-    interval: process.env.SYNC_INTERVAL || '*/5 * * * *',
+    interval: process.env.SYNC_INTERVAL || '*/30 * * * *',
     timezone: process.env.TIMEZONE || 'America/Mexico_City',
+  },
+  enroll: {
+    interval: process.env.ENROLL_INTERVAL || '0 8 * * 2',
   },
   log: {
     level: process.env.LOG_LEVEL || 'info',

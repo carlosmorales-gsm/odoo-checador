@@ -41,6 +41,7 @@ class OdooClient {
     if (!this.uid) await this.authenticate();
     const cleanKwargs = {};
     if (kwargs.limit !== undefined) cleanKwargs.limit = kwargs.limit;
+    if (kwargs.offset !== undefined) cleanKwargs.offset = kwargs.offset;
     if (kwargs.order !== undefined) cleanKwargs.order = kwargs.order;
     if (kwargs.context) cleanKwargs.context = kwargs.context;
 
@@ -50,23 +51,42 @@ class OdooClient {
     return this._rpc(this._object, 'execute_kw', params);
   }
 
-  async getEmployeeByZktecoId(zkUserId) {
-    const ids = await this._call('hr.employee', 'search', [
-      [['x_zkteco_user_id', '=', String(zkUserId)]],
-    ]);
-    if (!ids || ids.length === 0) return null;
+  async getAllEmployees(fields = ['id', 'name', 'barcode']) {
+    const BATCH = 200;
+    let offset = 0;
+    const all = [];
+
+    while (true) {
+      const ids = await this._call(
+        'hr.employee', 'search', [[]], { limit: BATCH, offset }
+      );
+      if (!ids || ids.length === 0) break;
+      const records = await this._call('hr.employee', 'read', [ids, fields]);
+      all.push(...records);
+      if (ids.length < BATCH) break;
+      offset += BATCH;
+    }
+
+    return all;
+  }
+
+  async getEmployeeById(employeeId) {
     const records = await this._call('hr.employee', 'read', [
-      [ids[0]],
-      ['id', 'name', 'x_zkteco_user_id'],
+      [employeeId],
+      ['id', 'name', 'barcode'],
     ]);
     return records[0] || null;
   }
 
   async getLastOpenAttendance(employeeId) {
+    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000)
+      .toISOString().replace('T', ' ').substring(0, 19);
+
     const ids = await this._call('hr.attendance', 'search', [
       [
         ['employee_id', '=', employeeId],
         ['check_out', '=', false],
+        ['check_in', '>=', cutoff],
       ],
     ], { limit: 1, order: 'check_in desc' });
     if (!ids || ids.length === 0) return null;
@@ -75,6 +95,13 @@ class OdooClient {
       ['id', 'employee_id', 'check_in', 'check_out'],
     ]);
     return records[0] || null;
+  }
+
+  async setEmployeeBarcode(employeeId, barcode) {
+    await this._call('hr.employee', 'write', [
+      [employeeId],
+      { barcode: String(barcode) },
+    ]);
   }
 
   async createCheckIn(employeeId, timestamp) {

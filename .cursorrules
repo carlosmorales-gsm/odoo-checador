@@ -1,0 +1,106 @@
+# odoo-checador — Reglas de Proyecto
+
+## Descripción
+
+Servicio de sincronización de asistencia entre dispositivos biométricos ZKTeco (F22ID) y Odoo 17.
+Se ejecuta como servicio (systemd en Raspberry Pi o Docker) y sincroniza registros de checada
+automáticamente mediante cron cada 5 minutos.
+
+## Stack Tecnológico
+
+- **Runtime:** Node.js 20 (Alpine en Docker)
+- **Base de datos local:** SQLite via `better-sqlite3` (WAL mode) — tracking de estado de sincronización
+- **Comunicación con Odoo:** XML-RPC (`xmlrpc` package) — Odoo 17 SaaS
+- **Comunicación con ZKTeco:** TCP via `zkteco-js` — dispositivos F22ID biométricos
+- **Cron:** `node-cron` para ciclos de sincronización
+- **Logging:** `winston` — formato timestamp + level + service + message
+- **HTTP:** Servidor nativo Node para health check en `/health`
+- **Config:** `dotenv` — variables de entorno desde `.env`
+
+## Arquitectura
+
+```
+src/
+├── config.js           # Carga y valida variables de entorno
+├── index.js            # Entry point: init DB, cron, health server, graceful shutdown
+├── db/
+│   └── state.js        # SQLite: sync_state (último timestamp por dispositivo) y sync_log
+├── odoo/
+│   └── client.js       # Cliente XML-RPC: auth, getEmployeeByZktecoId, check-in/out
+├── sync/
+│   └── attendance.js   # Lógica core: obtener logs ZKTeco → filtrar nuevos → crear/cerrar asistencias en Odoo
+└── zkteco/
+    └── client.js       # Wrapper zkteco-js: getAttendanceLogs, getUsers, setUser, validateUsersAcrossDevices
+```
+
+## Flujo de Sincronización
+
+1. Cron dispara `syncAll()` cada `SYNC_INTERVAL`
+2. Para cada dispositivo en `ZKTECO_DEVICES`:
+   a. Conectar al ZKTeco via TCP y obtener registros de asistencia
+   b. Filtrar solo registros nuevos (posteriores al último `last_synced_timestamp` en SQLite)
+   c. Para cada registro nuevo:
+      - Buscar empleado en Odoo por `x_zkteco_user_id` (campo custom en `hr.employee`)
+      - Si no hay asistencia abierta → `createCheckIn`
+      - Si hay asistencia abierta → `updateCheckOut`
+      - Registrar en `sync_log`
+   d. Actualizar `last_synced_timestamp`
+
+## Modelo de Datos
+
+### Odoo (remoto)
+- `hr.employee` con campo custom `x_zkteco_user_id` (char) — mapeo ZKTeco ↔ Odoo
+- `hr.attendance` — check_in / check_out timestamps en UTC
+
+### SQLite (local)
+- `sync_state(device_ip PK, last_synced_timestamp)` — control incremental
+- `sync_log(id, device_ip, zk_user_id, timestamp, action, odoo_attendance_id, synced_at)` — audit trail
+
+## Convenciones de Código
+
+- **Idioma del código:** Inglés para nombres de variables, funciones y módulos
+- **Idioma de logs/comentarios:** Inglés para logs de winston, español OK en comentarios descriptivos
+- **Estilo:** CommonJS (`require`/`module.exports`), sin TypeScript
+- **Async:** async/await en todo, nunca callbacks directos excepto en el wrapper XML-RPC
+- **Error handling:** try/catch en cada dispositivo individual, el servicio nunca debe crashear
+- **Timestamps:** ZKTeco entrega hora local (America/Mexico_City), se convierte a UTC antes de enviar a Odoo
+- **IDs de usuario:** Siempre `String` para consistencia entre ZKTeco y Odoo
+
+## Variables de Entorno (.env)
+
+| Variable | Descripción | Ejemplo |
+|----------|-------------|---------|
+| `ODOO_URL` | URL de la instancia Odoo (sin trailing slash) | `https://mi-empresa.odoo.com` |
+| `ODOO_DB` | Nombre de la base de datos Odoo | `mi-empresa-produccion` |
+| `ODOO_USER` | Email del usuario Odoo con permisos de asistencia | `user@empresa.com` |
+| `ODOO_API_KEY` | API key de Odoo (Settings → API Keys) | `abc123...` |
+| `ZKTECO_DEVICES` | JSON array de dispositivos | `[{"name":"Oficina","ip":"10.0.0.100","port":4370}]` |
+| `SYNC_INTERVAL` | Expresión cron | `*/5 * * * *` |
+| `TIMEZONE` | Timezone de los dispositivos | `America/Mexico_City` |
+| `LOG_LEVEL` | Nivel de logging winston | `info` |
+| `HEALTH_PORT` | Puerto del health check HTTP | `3000` |
+| `DB_PATH` | Ruta al archivo SQLite (solo en Docker) | `/data/sync-state.db` |
+
+## Deploy
+
+### Docker (recomendado)
+```bash
+docker compose up -d
+```
+- Volume `sync-data` persiste el SQLite en `/data/sync-state.db`
+- Health check automático cada 30s en `/health`
+
+### Raspberry Pi (systemd)
+- Ver `SETUP-RASPBERRY-PI.md`
+- Servicio systemd con restart automático
+- SQLite en directorio del proyecto
+
+## Consideraciones Importantes
+
+- Los dispositivos ZKTeco se conectan via TCP directo — requieren acceso de red al IP del checador
+- La librería `zkteco-js` puede lanzar excepciones no atrapadas internamente — manejar con cuidado
+- El campo `x_zkteco_user_id` debe existir en Odoo antes de usar el sync (se crea via Odoo Studio o script)
+- La conversión de timezone usa `Intl.DateTimeFormat` — funciona correctamente en Node.js 20+
+- El servicio tolera dispositivos no accesibles: registra error y continúa con el siguiente
+
+## Responde Siempre en Español
