@@ -145,10 +145,11 @@ async function enrollDeviceFromOdoo(device, odoo) {
       });
       logger.debug(`${deviceLabel}: [${emp.id}] ${emp.name} → uid=${emp.barcode}`);
       added++;
-    } catch (err) {
-      logger.error(`${deviceLabel}: failed to set user [${emp.id}] ${emp.name}: ${err.message}`);
-      errors++;
-    }
+      } catch (err) {
+        const msg = (err && (err.message || err.toString())) || String(err);
+        logger.error(`${deviceLabel}: failed to set user [${emp.id}] ${emp.name}: ${msg}`);
+        errors++;
+      }
   }
   return { added, errors };
 }

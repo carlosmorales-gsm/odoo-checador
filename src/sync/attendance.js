@@ -8,6 +8,23 @@ const { restoreFingerprintsFromBackup } = require('./fingerprint-restore');
 
 const logger = createChild('sync');
 
+/** Current time in device timezone, format "YYYY-MM-DD HH:mm:ss" for sync_state comparison */
+function nowInDeviceTz(timezone) {
+  const formatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+  const parts = formatter.formatToParts(new Date());
+  const get = (type) => parts.find((p) => p.type === type)?.value || '';
+  return `${get('year')}-${get('month')}-${get('day')} ${get('hour')}:${get('minute')}:${get('second')}`;
+}
+
 function toUTC(localDateStr, timezone) {
   // localDateStr comes from ZKTeco as "YYYY-MM-DD HH:mm:ss" in device-local time.
   // Append 'Z' to treat the string as an anchor in UTC for offset calculation.
@@ -46,14 +63,24 @@ async function syncDevice(device, odoo) {
     try {
       logger.info(`${deviceLabel}: new device detected, reprovisioning (clear → enroll from Odoo → restore fingerprints)...`);
       await zkClient.clearDevice(device);
+      logger.info(`${deviceLabel}: device cleared`);
       await enrollDeviceFromOdoo(device, odoo);
+      logger.info(`${deviceLabel}: enrollment from Odoo done`);
+      await new Promise((r) => setTimeout(r, 1500));
       await restoreFingerprintsFromBackup(device);
       logger.info(`${deviceLabel}: reprovisioning complete`);
+      // Mark device as provisioned so we don't reprovision again on next cycle (sync_state is
+      // updated even when getAttendanceLogs fails or returns 0 records after clear).
+      const watermark = nowInDeviceTz(config.sync.timezone);
+      stateDb.setLastSyncedTimestamp(device.ip, watermark);
+      logger.info(`${deviceLabel}: registered in sync_state (last_synced=${watermark}), next runs will only sync attendance`);
     } catch (err) {
       logger.error(`${deviceLabel}: reprovisioning failed: ${err.message}`);
       return { device: deviceLabel, processed: 0, errors: 1 };
     }
   }
+
+  const effectiveLastSynced = stateDb.getLastSyncedTimestamp(device.ip);
 
   let logs;
   try {
@@ -63,11 +90,11 @@ async function syncDevice(device, odoo) {
     return { device: deviceLabel, processed: 0, errors: 1 };
   }
 
-  logger.info(`${deviceLabel}: ${logs.length} total records, last synced: ${lastSynced || 'never'}`);
+  logger.info(`${deviceLabel}: ${logs.length} total records, last synced: ${effectiveLastSynced || 'never'}`);
 
   // Filter new records and sort chronologically
   const newLogs = logs
-    .filter((l) => !lastSynced || l.timestamp > lastSynced)
+    .filter((l) => !effectiveLastSynced || l.timestamp > effectiveLastSynced)
     .sort((a, b) => (a.timestamp > b.timestamp ? 1 : -1));
 
   if (newLogs.length === 0) {
@@ -79,7 +106,7 @@ async function syncDevice(device, odoo) {
 
   let processed = 0;
   let errors = 0;
-  let latestTimestamp = lastSynced;
+  let latestTimestamp = effectiveLastSynced;
   let encounteredError = false;
   // Cache employee lookups to avoid repeated Odoo calls
   const employeeCache = new Map();
@@ -144,7 +171,7 @@ async function syncDevice(device, odoo) {
   }
 
   // Update last synced timestamp
-  if (latestTimestamp && latestTimestamp !== lastSynced) {
+  if (latestTimestamp && latestTimestamp !== effectiveLastSynced) {
     stateDb.setLastSyncedTimestamp(device.ip, latestTimestamp);
   }
 

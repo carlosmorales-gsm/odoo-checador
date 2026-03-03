@@ -463,6 +463,8 @@ odoo-checador/
 │   ├── restore-device-users.js  # Restaura usuarios en dispositivos desde respaldo
 │   └── clear-device.js          # Limpia usuarios/asistencia de un dispositivo (uso avanzado)
 ├── fingerprints/                # Respaldos de huellas (gitignored)
+├── patches/                     # Parches a dependencias (patch-package)
+│   └── zkteco-js+1.7.1.patch   # Soporte F22ID: templates por chunks (CMD 1500)
 ├── Dockerfile
 ├── docker-compose.yml
 ├── .env.example
@@ -472,6 +474,8 @@ odoo-checador/
 ```
 
 No se versionan (ver `.gitignore`): `node_modules/`, `.env`, `logs/`, `*.db`, `fingerprints/`, reportes generados y archivos de IDE/OS.
+
+La carpeta `patches/` sí se versiona. Tras `npm install`, los parches se aplican con `patch-package` (script postinstall). El parche de `zkteco-js` añade soporte para F22ID que responden CMD 1500 al pedir templates de huella (lectura por chunks).
 
 ### Módulos Principales
 

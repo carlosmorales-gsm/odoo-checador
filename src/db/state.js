@@ -65,6 +65,10 @@ function getAllSyncStates() {
   return db.prepare('SELECT device_ip, last_synced_timestamp FROM sync_state ORDER BY device_ip').all();
 }
 
+function deleteSyncState(deviceIp) {
+  return db.prepare('DELETE FROM sync_state WHERE device_ip = ?').run(deviceIp);
+}
+
 function getSyncLogs({ deviceIp, limit = 100, offset = 0, action } = {}) {
   let sql = 'SELECT * FROM sync_log WHERE 1=1';
   const params = [];
@@ -111,5 +115,5 @@ function close() {
 
 module.exports = {
   init, getLastSyncedTimestamp, setLastSyncedTimestamp, logSync, isAlreadySynced,
-  getAllSyncStates, getSyncLogs, getSyncStats, close,
+  getAllSyncStates, deleteSyncState, getSyncLogs, getSyncStats, close,
 };

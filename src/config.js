@@ -31,6 +31,7 @@ const config = {
   },
   zkteco: {
     devices: parseDevices(required('ZKTECO_DEVICES')),
+    timeoutMs: parseInt(process.env.ZKTECO_TIMEOUT_MS, 10) || 30000,
   },
   sync: {
     interval: process.env.SYNC_INTERVAL || '*/30 * * * *',

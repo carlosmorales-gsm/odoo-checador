@@ -54,6 +54,12 @@ async function restoreFingerprintsFromBackup(device) {
     return { restored: 0, errors: 0 };
   }
 
+  try {
+    await zkClient.freeData(device);
+  } catch (err) {
+    logger.warn(`${deviceLabel}: freeData before restore failed (continuing): ${err.message}`);
+  }
+
   let users;
   try {
     users = await zkClient.getUsers(device);
@@ -78,7 +84,7 @@ async function restoreFingerprintsFromBackup(device) {
 
     try {
       await zkClient.setUserFingerprints(device, user.uid, backup.templates);
-      logger.debug(`${deviceLabel}: restored ${backup.templates.length} template(s) for [${employeeId}] ${user.name} (uid=${user.uid})`);
+      logger.info(`${deviceLabel}: restored ${backup.templates.length} template(s) for [${employeeId}] ${user.name} (uid=${user.uid})`);
       restored++;
     } catch (err) {
       logger.error(`${deviceLabel}: failed to restore fingerprints for [${employeeId}] ${user.name}: ${err.message}`);

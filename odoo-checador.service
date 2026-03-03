@@ -1,0 +1,16 @@
+[Unit]
+Description=ZKTeco → Odoo Attendance Sync
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=gsm_sistemas
+WorkingDirectory=/home/gsm_sistemas/odoo-checador
+ExecStart=/usr/bin/node src/index.js
+Restart=always
+RestartSec=10
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target

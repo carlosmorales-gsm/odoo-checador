@@ -5,7 +5,9 @@
  *
  * Uso:
  *   node scripts/backup-fingerprints.js                          # Todos los dispositivos
- *   node scripts/backup-fingerprints.js --device "Fune Navolato" # Un dispositivo especifico
+ *   node scripts/backup-fingerprints.js --device "Fune Navolato"  # Un dispositivo
+ *   node scripts/backup-fingerprints.js --uid 128                 # Solo el usuario con uid 128 (ej. Jorge Rivera)
+ *   node scripts/backup-fingerprints.js --debug                  # Ver respuesta del dispositivo por dedo (diagnostico)
  */
 
 const path = require('path');
@@ -29,13 +31,19 @@ function slugify(name) {
 function parseArgs() {
   const args = process.argv.slice(2);
   const deviceIdx = args.indexOf('--device');
+  const uidIdx = args.indexOf('--uid');
+  const debug = process.env.BACKUP_FINGERPRINTS_DEBUG === '1' || args.includes('--debug');
   return {
     deviceFilter: deviceIdx !== -1 ? args[deviceIdx + 1] : null,
+    uidFilter: uidIdx !== -1 ? args[uidIdx + 1] : null,
+    debug,
   };
 }
 
 (async () => {
-  const { deviceFilter } = parseArgs();
+  const { deviceFilter, uidFilter, debug } = parseArgs();
+  if (debug) console.log('Modo debug: se mostrara la respuesta del dispositivo por cada dedo.\n');
+  if (uidFilter) console.log(`Solo usuario con uid=${uidFilter}\n`);
 
   if (!fs.existsSync(FINGERPRINTS_DIR)) {
     fs.mkdirSync(FINGERPRINTS_DIR, { recursive: true });
@@ -72,7 +80,15 @@ function parseArgs() {
       continue;
     }
 
-    console.log(`  ${users.length} usuarios encontrados\n`);
+    if (uidFilter !== null && uidFilter !== undefined) {
+      users = users.filter((u) => String(u.uid) === String(uidFilter));
+      if (users.length === 0) {
+        console.log(`  No hay usuario con uid=${uidFilter} en este dispositivo`);
+        continue;
+      }
+    }
+
+    console.log(`  ${users.length} usuario(s) a procesar\n`);
 
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
@@ -80,7 +96,7 @@ function parseArgs() {
 
       let templates;
       try {
-        templates = await zkClient.getUserFingerprints(device, user.uid);
+        templates = await zkClient.getUserFingerprints(device, user.uid, { debug });
       } catch (err) {
         console.log(`  ${idx} ${user.name} (uid=${user.uid}) — ERROR: ${err.message}`);
         totalErrors++;
