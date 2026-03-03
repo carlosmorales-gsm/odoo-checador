@@ -41,6 +41,20 @@ async function getDeviceInfo(deviceConfig) {
   });
 }
 
+/**
+ * Clears all data on the device: users, fingerprint/face templates, and attendance logs.
+ * Uses disableDevice → clearData → enableDevice (same as scripts/clear-device.js).
+ *
+ * @param {Object} deviceConfig - { ip, port, name }
+ */
+async function clearDevice(deviceConfig) {
+  return withDevice(deviceConfig, async (device) => {
+    await device.disableDevice();
+    await device.clearData();
+    await device.enableDevice();
+  });
+}
+
 async function getAttendanceLogs(deviceConfig) {
   return withDevice(deviceConfig, async (device) => {
     // Query directly without trusting info.logCounts — the counter can be stale.
@@ -161,4 +175,42 @@ async function getUserFingerprints(deviceConfig, uid) {
   });
 }
 
-module.exports = { getDeviceInfo, getAttendanceLogs, getUsers, setUser, getUserFingerprints };
+/** ZK protocol: write request for user template (counterpart of CMD_USERTEMP_RRQ 9). */
+const CMD_USERTEMP_WRQ = 10;
+
+/**
+ * Writes fingerprint templates for a user to the device.
+ * Uses CMD_USERTEMP_WRQ at low level: uid(2 bytes LE) + finger(1 byte) + template data.
+ *
+ * @param {Object} deviceConfig - { ip, port, name }
+ * @param {number|string} uid - internal device uid (slot ID)
+ * @param {Array<{ finger: number, size?: number, data: string }>} templates - from backup (data is base64)
+ */
+async function setUserFingerprints(deviceConfig, uid, templates) {
+  if (!Array.isArray(templates) || templates.length === 0) return;
+
+  return withDevice(deviceConfig, async (device) => {
+    const uidNum = parseInt(uid, 10);
+    for (const t of templates) {
+      const finger = parseInt(t.finger, 10);
+      if (finger < 0 || finger > 9) continue;
+      const raw = Buffer.from(t.data, 'base64');
+      if (raw.length === 0) continue;
+
+      const reqData = Buffer.alloc(3 + raw.length);
+      reqData.writeUInt16LE(uidNum, 0);
+      reqData.writeUInt8(finger, 2);
+      raw.copy(reqData, 3);
+
+      const reply = await device.executeCmd(CMD_USERTEMP_WRQ, reqData);
+      if (reply && reply.length >= 2) {
+        const cmdId = reply.readUInt16LE(0);
+        if (cmdId !== 2000 && cmdId !== 2002) {
+          throw new Error(`setUserFingerprints: device rejected template uid=${uid} finger=${finger} (cmd=${cmdId})`);
+        }
+      }
+    }
+  });
+}
+
+module.exports = { getDeviceInfo, getAttendanceLogs, getUsers, setUser, getUserFingerprints, clearDevice, setUserFingerprints };

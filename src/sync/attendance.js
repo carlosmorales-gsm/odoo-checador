@@ -3,6 +3,8 @@ const OdooClient = require('../odoo/client');
 const stateDb = require('../db/state');
 const config = require('../config');
 const { createChild } = require('../logger');
+const { enrollDeviceFromOdoo } = require('./enrollment');
+const { restoreFingerprintsFromBackup } = require('./fingerprint-restore');
 
 const logger = createChild('sync');
 
@@ -37,6 +39,22 @@ async function syncDevice(device, odoo) {
   const deviceLabel = `${device.name} (${device.ip})`;
   logger.info(`Connecting to ${deviceLabel}...`);
 
+  const lastSynced = stateDb.getLastSyncedTimestamp(device.ip);
+
+  // New device (IP not in sync_state): reprovision before first attendance sync
+  if (lastSynced === null) {
+    try {
+      logger.info(`${deviceLabel}: new device detected, reprovisioning (clear → enroll from Odoo → restore fingerprints)...`);
+      await zkClient.clearDevice(device);
+      await enrollDeviceFromOdoo(device, odoo);
+      await restoreFingerprintsFromBackup(device);
+      logger.info(`${deviceLabel}: reprovisioning complete`);
+    } catch (err) {
+      logger.error(`${deviceLabel}: reprovisioning failed: ${err.message}`);
+      return { device: deviceLabel, processed: 0, errors: 1 };
+    }
+  }
+
   let logs;
   try {
     logs = await zkClient.getAttendanceLogs(device);
@@ -45,7 +63,6 @@ async function syncDevice(device, odoo) {
     return { device: deviceLabel, processed: 0, errors: 1 };
   }
 
-  const lastSynced = stateDb.getLastSyncedTimestamp(device.ip);
   logger.info(`${deviceLabel}: ${logs.length} total records, last synced: ${lastSynced || 'never'}`);
 
   // Filter new records and sort chronologically

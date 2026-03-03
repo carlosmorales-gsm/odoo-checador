@@ -2,6 +2,24 @@ const path = require('path');
 const winston = require('winston');
 const config = require('./config');
 
+const MAX_LOG_ENTRIES = 2000;
+const logBuffer = [];
+
+class MemoryTransport extends winston.Transport {
+  log(info, callback) {
+    setImmediate(() => this.emit('logged', info));
+    const entry = {
+      timestamp: info.timestamp,
+      level: info.level,
+      message: info.message,
+      service: info.service || null,
+    };
+    logBuffer.push(entry);
+    if (logBuffer.length > MAX_LOG_ENTRIES) logBuffer.shift();
+    callback();
+  }
+}
+
 const format = winston.format.combine(
   winston.format.timestamp(),
   winston.format.printf(({ timestamp, level, message, service }) => {
@@ -13,7 +31,10 @@ const format = winston.format.combine(
 const logger = winston.createLogger({
   level: config.log.level,
   format,
-  transports: [new winston.transports.Console()],
+  transports: [
+    new winston.transports.Console(),
+    new MemoryTransport(),
+  ],
 });
 
 if (config.log.filePath) {
@@ -40,4 +61,15 @@ function createChild(service) {
   return logger.child({ service });
 }
 
-module.exports = { logger, createChild };
+/**
+ * Returns the last N log entries from the in-memory buffer (for GET /api/logs).
+ * @param {number} [limit=500] - max entries to return (capped at MAX_LOG_ENTRIES)
+ * @returns {{ entries: Array<{ timestamp, level, message, service }> }}
+ */
+function getRecentLogs(limit = 500) {
+  const n = Math.min(Math.max(1, parseInt(limit, 10) || 500), MAX_LOG_ENTRIES);
+  const entries = logBuffer.slice(-n);
+  return { entries };
+}
+
+module.exports = { logger, createChild, getRecentLogs };

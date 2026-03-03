@@ -101,4 +101,56 @@ async function enrollNewEmployees({ dryRun = false } = {}) {
   return { enrolled, errors, details };
 }
 
-module.exports = { enrollNewEmployees };
+/**
+ * Populates a single device with all users from Odoo that have a barcode (uid).
+ * Does not modify Odoo. Used when reprovisioning a new/cleared device so uid and userid stay in sync with Odoo.
+ *
+ * @param {Object} device - device config { ip, port, name }
+ * @param {Object} odoo - authenticated OdooClient instance
+ * @returns {{ added: number, errors: number }}
+ */
+async function enrollDeviceFromOdoo(device, odoo) {
+  const deviceLabel = `${device.name} (${device.ip})`;
+  const employees = await odoo.getAllEmployees(['id', 'name', 'barcode']);
+  const withBarcode = employees.filter((e) => e.barcode);
+  if (withBarcode.length === 0) {
+    logger.info(`${deviceLabel}: no employees with barcode in Odoo, skipping user population`);
+    return { added: 0, errors: 0 };
+  }
+
+  let users;
+  try {
+    users = await zkClient.getUsers(device);
+  } catch (err) {
+    logger.error(`${deviceLabel}: failed to get users: ${err.message}`);
+    return { added: 0, errors: withBarcode.length };
+  }
+
+  const existingIds = new Set(users.map((u) => u.userId));
+  const missing = withBarcode.filter((e) => !existingIds.has(String(e.id)));
+  if (missing.length === 0) {
+    logger.info(`${deviceLabel}: all ${withBarcode.length} users already on device`);
+    return { added: 0, errors: 0 };
+  }
+
+  logger.info(`${deviceLabel}: adding ${missing.length} users from Odoo (uid=barcode, userid=employee.id)`);
+  let added = 0;
+  let errors = 0;
+  for (const emp of missing) {
+    try {
+      await zkClient.setUser(device, {
+        uid: emp.barcode,
+        userid: emp.id,
+        name: emp.name,
+      });
+      logger.debug(`${deviceLabel}: [${emp.id}] ${emp.name} → uid=${emp.barcode}`);
+      added++;
+    } catch (err) {
+      logger.error(`${deviceLabel}: failed to set user [${emp.id}] ${emp.name}: ${err.message}`);
+      errors++;
+    }
+  }
+  return { added, errors };
+}
+
+module.exports = { enrollNewEmployees, enrollDeviceFromOdoo };

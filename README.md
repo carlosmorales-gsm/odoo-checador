@@ -235,14 +235,49 @@ Odoo (empleados sin barcode) → Registra en ZKTeco → Escribe barcode en Odoo
    - Escribe ese `uid` como `barcode` en Odoo
 4. En el siguiente ciclo, ese empleado ya no aparece como pendiente
 
-### Health Check
+### Health Check y API HTTP
 
-El servicio expone un endpoint HTTP:
+El servicio expone un servidor HTTP en el puerto configurado (`HEALTH_PORT`, por defecto 3000). Endpoints disponibles:
 
+| Método | Ruta | Descripción |
+|--------|------|-------------|
+| GET | `/health` | Estado del servicio y flags `syncing` / `enrolling` |
+| GET | `/api/logs` | Últimos logs en memoria (para diagnóstico sin SSH) |
+| GET | `/api/sync-state` | Estado de sincronización por dispositivo (IP y último timestamp) |
+| GET | `/api/sync-log` | Registro de auditoría de checadas sincronizadas |
+| GET | `/api/stats` | Estadísticas: total, hoy, por acción, por dispositivo |
+| GET | `/` o `/console` | Consola web con estadísticas y últimos registros |
+
+**Comandos útiles (reemplaza `localhost:3000` por la IP del Pi si consultas desde otra máquina):**
+
+```bash
+# Estado del servicio
+curl http://localhost:3000/health
+
+# Logs recientes (JSON, últimas 500 entradas)
+curl http://localhost:3000/api/logs
+
+# Logs en texto plano, últimas 200 líneas (fácil de leer o guardar)
+curl "http://localhost:3000/api/logs?limit=200&format=text"
+
+# Estado de cada dispositivo (último sync)
+curl http://localhost:3000/api/sync-state
+
+# Últimos registros de sync (check-in/check-out)
+curl "http://localhost:3000/api/sync-log?limit=50"
+
+# Estadísticas agregadas
+curl http://localhost:3000/api/stats
 ```
-GET http://localhost:3000/health
-→ {"status":"ok","syncing":false}
-```
+
+**Parámetros opcionales de `/api/logs`:**
+
+| Parámetro | Descripción | Ejemplo |
+|-----------|-------------|---------|
+| `limit` | Número de entradas (máx. 2000) | `?limit=100` |
+| `format` | `text` para texto plano, uno por línea | `?format=text` |
+
+El buffer de logs guarda las últimas 2000 entradas desde el arranque del proceso; no depende de `LOG_PATH`.
 
 ---
 
@@ -268,6 +303,11 @@ node scripts/dry-run-enrollment.js
 
 # Asistencia — Qué checadas se sincronizarían
 node scripts/dry-run-attendance.js
+
+# Reprovisionado — Qué dispositivos se considerarían "nuevos" y qué pasos se ejecutarían (clear → usuarios Odoo → huellas)
+node scripts/dry-run-reprovision.js
+# Solo un dispositivo:
+node scripts/dry-run-reprovision.js --device "Oficina Principal"
 ```
 
 ### Respaldo de Huellas
@@ -416,6 +456,7 @@ odoo-checador/
 ├── scripts/
 │   ├── dry-run-enrollment.js    # Preview cruce Odoo ↔ ZKTeco
 │   ├── dry-run-attendance.js    # Preview de checadas pendientes
+│   ├── dry-run-reprovision.js   # Preview reprovisionado (checador nuevo: clear → Odoo → huellas)
 │   ├── enroll-employees.js      # Enrollment manual (--dry-run / real)
 │   ├── backup-fingerprints.js   # Respaldo de huellas digitales
 │   ├── run-sync.js              # Ejecuta un ciclo de sync de asistencia (sin cron)

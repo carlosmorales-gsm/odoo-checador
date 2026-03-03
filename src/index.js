@@ -1,5 +1,5 @@
 const config = require('./config');
-const { logger } = require('./logger');
+const { logger, getRecentLogs } = require('./logger');
 const cron = require('node-cron');
 const http = require('http');
 const stateDb = require('./db/state');
@@ -146,6 +146,16 @@ const server = http.createServer((req, res) => {
 
   } else if (path === '/api/stats') {
     json(res, stateDb.getSyncStats());
+
+  } else if (path === '/api/logs') {
+    const limit = Math.min(parseInt(query.limit, 10) || 500, 2000);
+    const data = getRecentLogs(limit);
+    if (query.format === 'text') {
+      res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end(data.entries.map((e) => e.message).filter(Boolean).join('\n'));
+    } else {
+      json(res, data);
+    }
 
   } else if (path === '/' || path === '/console') {
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
