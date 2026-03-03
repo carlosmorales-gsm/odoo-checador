@@ -98,4 +98,104 @@ async function restoreFingerprintsFromBackup(device) {
   return { restored, errors };
 }
 
-module.exports = { restoreFingerprintsFromBackup, loadBackupsByEmployee, FINGERPRINTS_DIR };
+/**
+ * For the given device, finds users that have no fingerprints; if a backup exists for that
+ * employee (userId = employeeId), writes templates from the backup using the device's uid.
+ * Only considers users that exist in Odoo with barcode (enrolled). Does not create users
+ * or read from other devices — Odoo and fingerprints/ are the single source of truth.
+ *
+ * @param {Object} device - device config { ip, port, name }
+ * @param {Object} odoo - authenticated OdooClient instance
+ * @param {{ dryRun?: boolean }} [opts] - dryRun: true to only report what would be synced, no writes
+ * @returns {Promise<{ restored: number, skipped: number, errors: number, wouldRestore?: Array<{ employeeId: number, name: string, uid: string }> }>}
+ */
+async function syncMissingFingerprintsToDevice(device, odoo, opts = {}) {
+  const { dryRun = false } = opts;
+  const deviceLabel = `${device.name} (${device.ip})`;
+  const byEmployee = loadBackupsByEmployee();
+  if (byEmployee.size === 0) {
+    logger.info(`${deviceLabel}: no fingerprint backups, skipping sync missing`);
+    return { restored: 0, skipped: 0, errors: 0, wouldRestore: [] };
+  }
+
+  let users;
+  try {
+    users = await zkClient.getUsers(device);
+  } catch (err) {
+    logger.error(`${deviceLabel}: failed to get users: ${err.message}`);
+    return { restored: 0, skipped: 0, errors: 1, wouldRestore: [] };
+  }
+
+  if (users.length === 0) {
+    logger.info(`${deviceLabel}: no users on device, skipping sync missing`);
+    return { restored: 0, skipped: 0, errors: 0, wouldRestore: [] };
+  }
+
+  const employees = await odoo.getAllEmployees(['id', 'name', 'barcode']);
+  const odooIdsWithBarcode = new Set(employees.filter((e) => e.barcode).map((e) => String(e.id)));
+  const deviceUsersFromOdoo = users.filter((u) => odooIdsWithBarcode.has(String(u.userId)));
+
+  if (deviceUsersFromOdoo.length === 0) {
+    logger.info(`${deviceLabel}: no device users matching Odoo (with barcode), skipping`);
+    return { restored: 0, skipped: 0, errors: 0, wouldRestore: [] };
+  }
+
+  if (!dryRun) {
+    try {
+      await zkClient.freeData(device);
+    } catch (err) {
+      logger.warn(`${deviceLabel}: freeData before sync failed (continuing): ${err.message}`);
+    }
+  }
+
+  let restored = 0;
+  let skipped = 0;
+  let errors = 0;
+  const wouldRestore = [];
+
+  for (const user of deviceUsersFromOdoo) {
+    const employeeId = parseInt(user.userId, 10);
+    if (isNaN(employeeId)) continue;
+
+    let templates;
+    try {
+      templates = await zkClient.getUserFingerprints(device, user.uid);
+    } catch (err) {
+      logger.error(`${deviceLabel}: failed to get fingerprints for [${employeeId}] ${user.name}: ${err.message}`);
+      errors++;
+      continue;
+    }
+
+    if (templates.length > 0) {
+      skipped++;
+      continue;
+    }
+
+    const backup = byEmployee.get(employeeId);
+    if (!backup || !backup.templates || backup.templates.length === 0) {
+      logger.debug(`${deviceLabel}: [${employeeId}] ${user.name} has no fingerprints and no backup, skipping`);
+      continue;
+    }
+
+    if (dryRun) {
+      wouldRestore.push({ employeeId, name: user.name, uid: user.uid, templateCount: backup.templates.length });
+      continue;
+    }
+
+    try {
+      await zkClient.setUserFingerprints(device, user.uid, backup.templates);
+      logger.info(`${deviceLabel}: synced ${backup.templates.length} template(s) from backup for [${employeeId}] ${user.name} (uid=${user.uid})`);
+      restored++;
+    } catch (err) {
+      logger.error(`${deviceLabel}: failed to set fingerprints for [${employeeId}] ${user.name}: ${err.message}`);
+      errors++;
+    }
+  }
+
+  if (restored > 0 || errors > 0) {
+    logger.info(`${deviceLabel}: sync missing fingerprints — ${restored} restored, ${skipped} already had fingerprints, ${errors} errors`);
+  }
+  return { restored, skipped, errors, wouldRestore };
+}
+
+module.exports = { restoreFingerprintsFromBackup, loadBackupsByEmployee, syncMissingFingerprintsToDevice, FINGERPRINTS_DIR };

@@ -3,8 +3,11 @@ const { logger, getRecentLogs } = require('./logger');
 const cron = require('node-cron');
 const http = require('http');
 const stateDb = require('./db/state');
+const OdooClient = require('./odoo/client');
 const { syncAll } = require('./sync/attendance');
 const { enrollNewEmployees } = require('./sync/enrollment');
+const { runBackupIncremental } = require('./sync/fingerprint-backup');
+const { syncMissingFingerprintsToDevice } = require('./sync/fingerprint-restore');
 
 // Initialize SQLite
 logger.info('Initializing database...');
@@ -12,6 +15,8 @@ stateDb.init();
 
 let syncing = false;
 let enrolling = false;
+let backingUp = false;
+let fingerprintSyncing = false;
 
 async function runSync() {
   if (syncing) {
@@ -43,6 +48,51 @@ async function runEnrollment() {
   }
 }
 
+async function runBackup() {
+  if (backingUp) {
+    logger.warn('Previous fingerprint backup still running, skipping');
+    return;
+  }
+  backingUp = true;
+  try {
+    logger.info('Fingerprint backup (incremental) starting');
+    const result = await runBackupIncremental({
+      force: false,
+      log: (msg) => logger.info(msg),
+    });
+    logger.info(`Fingerprint backup complete — ${result.totalUsers} users, ${result.totalTemplates} templates, ${result.totalErrors} errors`);
+  } catch (err) {
+    logger.error(`Fingerprint backup failed: ${err.message}`);
+  } finally {
+    backingUp = false;
+  }
+}
+
+async function runFingerprintSync() {
+  if (fingerprintSyncing) {
+    logger.warn('Previous fingerprint sync still running, skipping');
+    return;
+  }
+  fingerprintSyncing = true;
+  try {
+    logger.info('Fingerprint sync (missing → devices) starting');
+    const odoo = new OdooClient(config.odoo);
+    await odoo.authenticate();
+    let totalRestored = 0;
+    let totalErrors = 0;
+    for (const device of config.zkteco.devices) {
+      const result = await syncMissingFingerprintsToDevice(device, odoo);
+      totalRestored += result.restored;
+      totalErrors += result.errors;
+    }
+    logger.info(`Fingerprint sync complete — ${totalRestored} restored, ${totalErrors} errors`);
+  } catch (err) {
+    logger.error(`Fingerprint sync failed: ${err.message}`);
+  } finally {
+    fingerprintSyncing = false;
+  }
+}
+
 if (config.cronEnabled) {
   // Cron 1 — Sync asistencia (cada 30 min por defecto)
   logger.info(`Scheduling attendance sync: ${config.sync.interval}`);
@@ -51,6 +101,14 @@ if (config.cronEnabled) {
   // Cron 2 — Enrollment semanal (martes 8am por defecto)
   logger.info(`Scheduling enrollment: ${config.enroll.interval}`);
   cron.schedule(config.enroll.interval, runEnrollment);
+
+  // Cron 3 — Respaldo incremental de huellas (domingo 2:00 por defecto)
+  logger.info(`Scheduling fingerprint backup: ${config.backup.interval}`);
+  cron.schedule(config.backup.interval, runBackup);
+
+  // Cron 4 — Sync huellas faltantes desde respaldo a cada checador (domingo 3:00 por defecto)
+  logger.info(`Scheduling fingerprint sync (missing → devices): ${config.fingerprintSync.interval}`);
+  cron.schedule(config.fingerprintSync.interval, runFingerprintSync);
 
   // Sync inicial al arrancar
   logger.info('Running initial sync...');
@@ -130,7 +188,7 @@ const server = http.createServer((req, res) => {
   const query = parseQuery(req.url);
 
   if (path === '/health') {
-    json(res, { status: 'ok', syncing, enrolling });
+    json(res, { status: 'ok', syncing, enrolling, backingUp, fingerprintSyncing });
 
   } else if (path === '/api/sync-state') {
     json(res, stateDb.getAllSyncStates());

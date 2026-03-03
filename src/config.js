@@ -40,6 +40,12 @@ const config = {
   enroll: {
     interval: process.env.ENROLL_INTERVAL || '0 8 * * 2',
   },
+  backup: {
+    interval: process.env.BACKUP_INTERVAL || '0 2 * * 0',
+  },
+  fingerprintSync: {
+    interval: process.env.FINGERPRINT_SYNC_INTERVAL || '0 3 * * 0',
+  },
   log: {
     level: process.env.LOG_LEVEL || 'info',
     filePath: process.env.LOG_PATH || null,

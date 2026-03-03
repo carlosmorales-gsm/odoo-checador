@@ -28,7 +28,10 @@ src/
 ├── odoo/
 │   └── client.js       # Cliente XML-RPC: auth, getEmployeeByZktecoId, check-in/out
 ├── sync/
-│   └── attendance.js   # Lógica core: obtener logs ZKTeco → filtrar nuevos → crear/cerrar asistencias en Odoo
+│   ├── attendance.js   # Lógica core: obtener logs ZKTeco → filtrar nuevos → crear/cerrar asistencias en Odoo
+│   ├── enrollment.js   # Enrollment de empleados Odoo en dispositivos (uid/barcode)
+│   ├── fingerprint-backup.js   # Respaldo incremental de huellas (runBackupIncremental)
+│   └── fingerprint-restore.js  # Restore/sync huellas desde fingerprints/ (restore + syncMissingFingerprintsToDevice)
 └── zkteco/
     └── client.js       # Wrapper zkteco-js: getAttendanceLogs, getUsers, setUser, getUserFingerprints
 ```
@@ -77,6 +80,8 @@ src/
 | `ZKTECO_DEVICES` | JSON array de dispositivos | `[{"name":"Oficina","ip":"10.0.0.100","port":4370}]` |
 | `SYNC_INTERVAL` | Expresión cron | `*/5 * * * *` |
 | `TIMEZONE` | Timezone de los dispositivos | `America/Mexico_City` |
+| `BACKUP_INTERVAL` | Cron respaldo incremental de huellas (por defecto domingo 2:00) | `0 2 * * 0` |
+| `FINGERPRINT_SYNC_INTERVAL` | Cron sync huellas faltantes desde respaldo a cada checador (por defecto domingo 3:00) | `0 3 * * 0` |
 | `LOG_LEVEL` | Nivel de logging winston | `info` |
 | `HEALTH_PORT` | Puerto del health check HTTP | `3000` |
 | `DB_PATH` | Ruta al archivo SQLite (solo en Docker) | `/data/sync-state.db` |
@@ -97,7 +102,9 @@ docker compose up -d
 
 ## Consideraciones Importantes
 
-- **Fuente de verdad:** La lista de empleados/usuarios en los checadores proviene solo de Odoo (enrollment). No se sincronizan usuarios entre dispositivos.
+- **Fuente de verdad:** La lista de empleados/usuarios en los checadores proviene solo de Odoo (enrollment). No se sincronizan usuarios entre dispositivos. Para huellas, la fuente de verdad es Odoo (quién debe estar) y la carpeta local `fingerprints/` (templates). No se copian huellas entre checadores para evitar planchar uid/id/templates.
+- **Respaldo de huellas:** Por defecto es incremental: solo se respaldan usuarios que aún no tienen archivo en `fingerprints/`. Use `--force` en el script para sobrescribir. El cron semanal (`BACKUP_INTERVAL`) ejecuta el respaldo incremental.
+- **Sync huellas faltantes:** Un cron (`FINGERPRINT_SYNC_INTERVAL`) revisa por cada checador los usuarios Odoo (con barcode) que no tienen huellas en ese dispositivo; si existe respaldo en `fingerprints/`, se escriben los templates usando el uid del dispositivo (nunca se lee de otro checador).
 - Los dispositivos ZKTeco se conectan via TCP directo — requieren acceso de red al IP del checador
 - La librería `zkteco-js` puede lanzar excepciones no atrapadas internamente — manejar con cuidado
 - El campo `x_zkteco_user_id` debe existir en Odoo antes de usar el sync (se crea via Odoo Studio o script)

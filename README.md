@@ -312,9 +312,17 @@ node scripts/dry-run-reprovision.js --device "Oficina Principal"
 
 ### Respaldo de Huellas
 
+Por defecto el respaldo es **incremental**: solo se respaldan usuarios que aún no tienen archivo en `fingerprints/`. Así se evita sobrescribir respaldos entre dispositivos (Odoo y `fingerprints/` son la fuente de verdad).
+
 ```bash
-# Todas las huellas de todos los dispositivos
+# Respaldo incremental (solo usuarios sin archivo en fingerprints/)
 node scripts/backup-fingerprints.js
+
+# Preview sin escribir (conecta a dispositivos, no escribe en fingerprints/)
+node scripts/backup-fingerprints.js --dry-run
+
+# Sobrescribir respaldos existentes (uso excepcional)
+node scripts/backup-fingerprints.js --force
 
 # Solo un dispositivo específico
 node scripts/backup-fingerprints.js --device "Oficina Principal"
@@ -327,6 +335,17 @@ fingerprints/
   782-martinez-mendez-juan-cristobal.json
   783-andrade-gutierrez-enrique.json
   ...
+```
+
+**Automatización (servicio con cron):** Con `CRON_ENABLED=1`, el servicio programa:
+- **Respaldo incremental** semanal (`BACKUP_INTERVAL`, por defecto domingo 2:00).
+- **Sync huellas faltantes:** por cada checador, detecta usuarios Odoo sin huellas en ese dispositivo y, si existe respaldo en `fingerprints/`, sube los templates (nunca se copia entre checadores). Intervalo: `FINGERPRINT_SYNC_INTERVAL` (por defecto domingo 3:00).
+
+**Preview del sync huellas faltantes (sin escribir en dispositivos):**
+
+```bash
+node scripts/dry-run-fingerprint-sync.js              # Todos los checadores
+node scripts/dry-run-fingerprint-sync.js --device "Oficina"  # Solo uno
 ```
 
 ### Otros scripts
@@ -389,7 +408,7 @@ Ahora debería mostrar que todos los empleados tienen barcode y están en los di
 npm start
 ```
 
-El servicio comienza a sincronizar asistencia cada 30 minutos y ejecuta enrollment automático cada martes a las 8am.
+El servicio comienza a sincronizar asistencia cada 30 minutos, ejecuta enrollment automático cada martes a las 8am, respaldo incremental de huellas cada domingo a las 2:00 y sync de huellas faltantes (desde respaldo a cada checador) cada domingo a las 3:00.
 
 ### Paso 7: Respaldar huellas (opcional)
 
@@ -398,6 +417,8 @@ Una vez que los empleados ya registraron sus huellas en los dispositivos:
 ```bash
 node scripts/backup-fingerprints.js
 ```
+
+Por defecto solo se respaldan usuarios que aún no tienen archivo en `fingerprints/`. El servicio también ejecuta este respaldo de forma automática cada semana y luego sincroniza huellas faltantes a cada checador desde el respaldo.
 
 ---
 
@@ -456,9 +477,10 @@ odoo-checador/
 ├── scripts/
 │   ├── dry-run-enrollment.js    # Preview cruce Odoo ↔ ZKTeco
 │   ├── dry-run-attendance.js    # Preview de checadas pendientes
-│   ├── dry-run-reprovision.js   # Preview reprovisionado (checador nuevo: clear → Odoo → huellas)
+│   ├── dry-run-reprovision.js    # Preview reprovisionado (checador nuevo: clear → Odoo → huellas)
+│   ├── dry-run-fingerprint-sync.js  # Preview sync huellas faltantes (sin escribir en dispositivos)
 │   ├── enroll-employees.js      # Enrollment manual (--dry-run / real)
-│   ├── backup-fingerprints.js   # Respaldo de huellas digitales
+│   ├── backup-fingerprints.js   # Respaldo de huellas (incremental por defecto, --force para sobrescribir)
 │   ├── run-sync.js              # Ejecuta un ciclo de sync de asistencia (sin cron)
 │   ├── restore-device-users.js  # Restaura usuarios en dispositivos desde respaldo
 │   └── clear-device.js          # Limpia usuarios/asistencia de un dispositivo (uso avanzado)
