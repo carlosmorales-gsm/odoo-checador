@@ -1,6 +1,20 @@
 const ZKTeco = require('zkteco-js');
 
 /**
+ * Normalize name for ZKTeco device display: remove accents, ñ→N, uppercase.
+ * Devices often use limited encoding and display ñ/accents incorrectly.
+ */
+function normalizeNameForDevice(name) {
+  if (typeof name !== 'string') return '';
+  return name
+    .replace(/ñ/gi, 'N')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
+    .toUpperCase()
+    .trim();
+}
+
+/**
  * Normalize timestamp from ZKTeco to "YYYY-MM-DD HH:mm:ss" format.
  * The device may return a JS Date string like "Wed Feb 25 2026 12:40:32 GMT-0700 ..."
  */
@@ -84,8 +98,9 @@ async function setUser(deviceConfig, userData) {
     throw new Error('Campos obligatorios: uid, userid, name');
   }
 
+  const displayName = normalizeNameForDevice(name);
   // Límites del protocolo ZKTeco
-  const safeName = name.substring(0, 24);
+  const safeName = displayName.substring(0, 24);
   const safePassword = String(password).substring(0, 8);
   const safeUserid = String(userid).substring(0, 9);
 
@@ -98,7 +113,7 @@ async function setUser(deviceConfig, userData) {
       role,
       cardno
     );
-    return { uid, userid, name, role, cardno };
+    return { uid, userid, name: displayName, role, cardno };
   });
 }
 
