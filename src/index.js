@@ -1,23 +1,10 @@
 const config = require('./config');
-const winston = require('winston');
+const { logger } = require('./logger');
 const cron = require('node-cron');
 const http = require('http');
 const stateDb = require('./db/state');
 const { syncAll } = require('./sync/attendance');
 const { enrollNewEmployees } = require('./sync/enrollment');
-
-// Configure logger
-const logger = winston.createLogger({
-  level: config.log.level,
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.printf(({ timestamp, level, message, service }) => {
-      const svc = service ? `[${service}]` : '';
-      return `${timestamp} ${level.toUpperCase()} ${svc} ${message}`;
-    })
-  ),
-  transports: [new winston.transports.Console()],
-});
 
 // Initialize SQLite
 logger.info('Initializing database...');

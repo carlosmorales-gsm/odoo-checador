@@ -1,9 +1,36 @@
+# Dependencies
 node_modules/
+
+# Environment (never commit secrets)
 .env
+.env.local
+.env.*.local
+
+# SQLite state (local sync state)
 *.db
 *.db-shm
 *.db-wal
+
+# Logs (console + optional file logging via LOG_PATH)
 *.log
+logs/
+
+# Generated reports
 reporte-*.md
+
+# IDE / editor
 .claude/
+.cursor/
+
+# Biometric data
 fingerprints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# npm
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm

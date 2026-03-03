@@ -1,10 +1,9 @@
 const zkClient = require('../zkteco/client');
 const OdooClient = require('../odoo/client');
 const config = require('../config');
-const winston = require('winston');
+const { createChild } = require('../logger');
 
-const logger = winston.createLogger({ defaultMeta: { service: 'enrollment' } });
-logger.add(new winston.transports.Console({ format: winston.format.simple() }));
+const logger = createChild('enrollment');
 
 async function enrollNewEmployees({ dryRun = false } = {}) {
   logger.info(`--- Enrollment ${dryRun ? 'DRY-RUN' : 'REAL'} starting ---`);

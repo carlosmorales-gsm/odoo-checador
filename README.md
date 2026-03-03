@@ -144,6 +144,10 @@ TIMEZONE=America/Mexico_City
 
 # ── Otros ─────────────────────────────────────────────────────────────
 LOG_LEVEL=info
+# Optional: file logging with rotation (e.g. on Raspberry Pi)
+# LOG_PATH=/var/log/odoo-checador/app.log
+# LOG_MAX_SIZE=10m
+# LOG_MAX_FILES=7d
 HEALTH_PORT=3000
 ```
 
@@ -160,6 +164,9 @@ HEALTH_PORT=3000
 | `ENROLL_INTERVAL` | No | `0 8 * * 2` | Expresión cron para enrollment semanal |
 | `TIMEZONE` | No | `America/Mexico_City` | Zona horaria de los dispositivos |
 | `LOG_LEVEL` | No | `info` | Nivel de log: `debug`, `info`, `warn`, `error` |
+| `LOG_PATH` | No | — | Si se define, se escribe log a archivo con rotación (ej. `/var/log/odoo-checador/app.log`) |
+| `LOG_MAX_SIZE` | No | `10m` | Tamaño máximo por archivo antes de rotar (ej. `20m`) |
+| `LOG_MAX_FILES` | No | `7d` | Retención: días (ej. `14d`) o número de archivos (ej. `5`) |
 | `HEALTH_PORT` | No | `3000` | Puerto del health check HTTP |
 | `DB_PATH` | No | `./sync-state.db` | Ruta de la base SQLite |
 | `NODE_TLS_REJECT_UNAUTHORIZED` | No | — | Poner a `0` solo para instancias `.dev.odoo.com` |
@@ -386,6 +393,7 @@ odoo-checador/
 ├── src/
 │   ├── index.js                 # Entry point: crons, health check, shutdown
 │   ├── config.js                # Carga y valida variables de entorno
+│   ├── logger.js                # Logger centralizado (consola + archivo opcional con rotación)
 │   ├── db/
 │   │   └── state.js             # SQLite: sync_state, sync_log
 │   ├── odoo/

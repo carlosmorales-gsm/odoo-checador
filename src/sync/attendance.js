@@ -2,11 +2,9 @@ const zkClient = require('../zkteco/client');
 const OdooClient = require('../odoo/client');
 const stateDb = require('../db/state');
 const config = require('../config');
-const winston = require('winston');
+const { createChild } = require('../logger');
 
-const logger = winston.createLogger({ defaultMeta: { service: 'sync' } });
-// Transports are configured in index.js; re-use root logger's transports
-logger.add(new winston.transports.Console({ format: winston.format.simple() }));
+const logger = createChild('sync');
 
 function toUTC(localDateStr, timezone) {
   // localDateStr comes from ZKTeco as "YYYY-MM-DD HH:mm:ss" in device-local time.
@@ -104,13 +102,13 @@ async function syncDevice(device, odoo) {
         // No open attendance → create check-in
         odooAttendanceId = await odoo.createCheckIn(employee.id, utcTimestamp);
         action = 'check_in';
-        logger.info(`Check-in: ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
+        logger.debug(`Check-in: ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
       } else {
         // Open attendance exists → close it with check-out
         await odoo.updateCheckOut(openAttendance.id, utcTimestamp);
         odooAttendanceId = openAttendance.id;
         action = 'check_out';
-        logger.info(`Check-out: ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
+        logger.debug(`Check-out: ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
       }
 
       stateDb.logSync(device.ip, log.userId, log.timestamp, action, odooAttendanceId);

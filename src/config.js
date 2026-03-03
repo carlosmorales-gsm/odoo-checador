@@ -41,6 +41,9 @@ const config = {
   },
   log: {
     level: process.env.LOG_LEVEL || 'info',
+    filePath: process.env.LOG_PATH || null,
+    maxSize: process.env.LOG_MAX_SIZE || '10m',
+    maxFiles: process.env.LOG_MAX_FILES || '7d',
   },
   healthPort: parseInt(process.env.HEALTH_PORT, 10) || 3000,
 };

@@ -1,13 +1,13 @@
-# Setup en Raspberry Pi
+# *Setup en Raspberry Pi*
 
-## Requisitos
+## *Requisitos*
 
-- Raspberry Pi 2B+ o superior (recomendado: Pi 4 o Pi 5)
-- Raspberry Pi OS (64-bit recomendado)
-- Conectado a la misma LAN que los checadores ZKTeco
-- Acceso SSH habilitado
+- *Raspberry Pi 2B+ o superior (recomendado: Pi 4 o Pi 5)*
+- *Raspberry Pi OS (64-bit recomendado)*
+- *Conectado a la misma LAN que los checadores ZKTeco*
+- *Acceso SSH habilitado*
 
-## 1. Instalar Node.js 20
+## *1. Instalar Node.js 20*
 
 ```bash
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash -
@@ -15,15 +15,15 @@ sudo apt-get install -y nodejs
 node -v  # debe mostrar v20.x.x
 ```
 
-## 2. Instalar dependencias del sistema
+## *2. Instalar dependencias del sistema*
 
-`better-sqlite3` necesita compilar código nativo:
+`better-sqlite3` *necesita compilar código nativo:*
 
 ```bash
 sudo apt-get install -y build-essential python3
 ```
 
-## 3. Clonar o copiar el proyecto
+## *3. Clonar o copiar el proyecto*
 
 ```bash
 # Opción A: desde git
@@ -35,21 +35,21 @@ cd /home/pi/odoo-checador
 # scp -r "/Users/cmgsm/Desarrollo GSM/odoo-checador" pi@<IP_PI>:/home/pi/odoo-checador
 ```
 
-## 4. Instalar dependencias
+## *4. Instalar dependencias*
 
 ```bash
 cd /home/pi/odoo-checador
 npm install
 ```
 
-## 5. Configurar variables de entorno
+## *5. Configurar variables de entorno*
 
 ```bash
 cp .env.example .env
 nano .env
 ```
 
-Llenar con tus valores reales:
+*Llenar con tus valores reales:*
 
 ```
 ODOO_URL=https://tu-empresa.odoo.com
@@ -63,31 +63,31 @@ LOG_LEVEL=info
 HEALTH_PORT=3000
 ```
 
-## 6. Probar conexión al checador
+## *6. Probar conexión al checador*
 
 ```bash
 node test-zkteco.js
 ```
 
-Debes ver la lista de usuarios y registros de asistencia.
+*Debes ver la lista de usuarios y registros de asistencia.*
 
-## 7. Probar el servicio
+## *7. Probar el servicio*
 
 ```bash
 npm start
 ```
 
-Verifica que sincronice correctamente. Detener con `Ctrl+C`.
+*Verifica que sincronice correctamente. Detener con* `Ctrl+C`*.*
 
-## 8. Configurar como servicio (inicio automático)
+## *8. Configurar como servicio (inicio automático)*
 
-Crear el archivo de servicio systemd:
+*Crear el archivo de servicio systemd:*
 
 ```bash
 sudo nano /etc/systemd/system/odoo-checador.service
 ```
 
-Pegar este contenido:
+*Pegar este contenido:*
 
 ```ini
 [Unit]
@@ -108,7 +108,7 @@ Environment=NODE_ENV=production
 WantedBy=multi-user.target
 ```
 
-Habilitar e iniciar:
+*Habilitar e iniciar:*
 
 ```bash
 sudo systemctl daemon-reload
@@ -116,7 +116,7 @@ sudo systemctl enable odoo-checador
 sudo systemctl start odoo-checador
 ```
 
-## 9. Comandos útiles
+## *9. Comandos útiles*
 
 ```bash
 # Ver estado
@@ -132,18 +132,29 @@ sudo systemctl restart odoo-checador
 sudo systemctl stop odoo-checador
 ```
 
-## 10. Verificar health check
+## *Logs*
 
-Desde el mismo Pi o cualquier máquina en la LAN:
+- **Consola (siempre):** Los logs se capturan por systemd. Ver en tiempo real: `journalctl -u odoo-checador -f`.
+- **Nivel recomendado en producción:** `LOG_LEVEL=info` (o `warn` si se quiere mínimo). Usar `LOG_LEVEL=debug` solo para diagnóstico (genera un log por cada check-in/check-out).
+- **Log a archivo (opcional):** Si defines `LOG_PATH` en `.env` (ej. `LOG_PATH=/var/log/odoo-checador/app.log`), el servicio escribe además en archivos con rotación por tamaño y antigüedad (`LOG_MAX_SIZE=10m`, `LOG_MAX_FILES=7d` por defecto), evitando llenar la SD. Crear el directorio y dar permisos al usuario del servicio:
+  ```bash
+  sudo mkdir -p /var/log/odoo-checador
+  sudo chown pi:pi /var/log/odoo-checador
+  ```
+
+## *10. Verificar health check*
+
+*Desde el mismo Pi o cualquier máquina en la LAN:*
 
 ```bash
 curl http://localhost:3000/health
 # {"status":"ok","syncing":false}
 ```
 
-## Notas
+## *Notas*
 
-- La base de datos SQLite se guarda en `sync-state.db` dentro del proyecto
-- Si el Pi se reinicia, el servicio arranca solo
-- Los logs se pueden ver con `journalctl`
-- El servicio consume menos de 100MB de RAM
+- *La base de datos SQLite se guarda en* `sync-state.db` *dentro del proyecto*
+- *Si el Pi se reinicia, el servicio arranca solo*
+- *Los logs se pueden ver con* `journalctl -u odoo-checador -f`*; opcionalmente también en archivo si* `LOG_PATH` *está configurado*
+- *El servicio consume menos de 100MB de RAM*
+
