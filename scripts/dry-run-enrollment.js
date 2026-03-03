@@ -8,10 +8,10 @@
  *   node scripts/dry-run-enrollment.js
  */
 
-process.on('uncaughtException', () => {});
-process.on('unhandledRejection', () => {});
+const path = require('path');
+require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 
-require('dotenv').config();
+const config = require('../src/config');
 const OdooClient = require('../src/odoo/client');
 const { getUsers, getDeviceInfo } = require('../src/zkteco/client');
 
@@ -23,12 +23,7 @@ function normalize(name) {
 }
 
 async function fetchOdooEmployees() {
-  const odoo = new OdooClient({
-    url: process.env.ODOO_URL.replace(/\/+$/, ''),
-    db: process.env.ODOO_DB,
-    user: process.env.ODOO_USER,
-    apiKey: process.env.ODOO_API_KEY,
-  });
+  const odoo = new OdooClient(config.odoo);
 
   console.log('Autenticando con Odoo...');
   await odoo.authenticate();
@@ -39,12 +34,7 @@ async function fetchOdooEmployees() {
 }
 
 async function fetchZktecoUsers() {
-  const devices = JSON.parse(process.env.ZKTECO_DEVICES).map((d, i) => ({
-    name: d.name || `Device-${i + 1}`,
-    ip: d.ip,
-    port: d.port || 4370,
-  }));
-
+  const devices = config.zkteco.devices;
   const result = {};
   for (const dev of devices) {
     try {

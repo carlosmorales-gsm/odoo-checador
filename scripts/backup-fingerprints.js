@@ -8,8 +8,6 @@
  *   node scripts/backup-fingerprints.js --device "Fune Navolato" # Un dispositivo especifico
  */
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 const path = require('path');
 const fs = require('fs');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });

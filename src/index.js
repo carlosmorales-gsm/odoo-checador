@@ -43,17 +43,21 @@ async function runEnrollment() {
   }
 }
 
-// Cron 1 — Sync asistencia (cada 30 min por defecto)
-logger.info(`Scheduling attendance sync: ${config.sync.interval}`);
-cron.schedule(config.sync.interval, runSync);
+if (config.cronEnabled) {
+  // Cron 1 — Sync asistencia (cada 30 min por defecto)
+  logger.info(`Scheduling attendance sync: ${config.sync.interval}`);
+  cron.schedule(config.sync.interval, runSync);
 
-// Cron 2 — Enrollment semanal (martes 8am por defecto)
-logger.info(`Scheduling enrollment: ${config.enroll.interval}`);
-cron.schedule(config.enroll.interval, runEnrollment);
+  // Cron 2 — Enrollment semanal (martes 8am por defecto)
+  logger.info(`Scheduling enrollment: ${config.enroll.interval}`);
+  cron.schedule(config.enroll.interval, runEnrollment);
 
-// Sync inicial al arrancar
-logger.info('Running initial sync...');
-runSync();
+  // Sync inicial al arrancar
+  logger.info('Running initial sync...');
+  runSync();
+} else {
+  logger.info('Crons disabled (CRON_ENABLED=0). Sync and enrollment will not run automatically. Use scripts for manual runs.');
+}
 
 function parseQuery(urlStr) {
   const url = new URL(urlStr, 'http://localhost');

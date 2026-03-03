@@ -8,7 +8,8 @@
  *   node scripts/enroll-employees.js
  *
  * Uso:
- *   node scripts/clear-device.js
+ *   node scripts/clear-device.js                    # Todos los dispositivos
+ *   node scripts/clear-device.js --device "Oficina" # Solo el dispositivo indicado
  */
 
 const path = require('path');
@@ -17,8 +18,29 @@ require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 const ZKTeco = require('zkteco-js');
 const config = require('../src/config');
 
+function parseArgs() {
+  const args = process.argv.slice(2);
+  const deviceIdx = args.indexOf('--device');
+  return {
+    deviceName: deviceIdx !== -1 ? args[deviceIdx + 1] : null,
+  };
+}
+
 (async () => {
-  for (const deviceConfig of config.zkteco.devices) {
+  const { deviceName } = parseArgs();
+  let devices = config.zkteco.devices;
+  if (deviceName) {
+    devices = devices.filter((d) => d.name === deviceName);
+    if (devices.length === 0) {
+      console.error(`No se encontró el dispositivo "${deviceName}".`);
+      console.error('Dispositivos configurados:', config.zkteco.devices.map((d) => d.name).join(', '));
+      process.exit(1);
+    }
+  } else {
+    console.log('Advertencia: se limpiarán TODOS los dispositivos configurados.\n');
+  }
+
+  for (const deviceConfig of devices) {
     const label = `${deviceConfig.name} (${deviceConfig.ip})`;
     console.log(`\nConectando a ${label}...`);
 

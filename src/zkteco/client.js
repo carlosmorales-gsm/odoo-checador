@@ -103,69 +103,6 @@ async function setUser(deviceConfig, userData) {
 }
 
 /**
- * Valida que todos los dispositivos tengan los mismos usuarios con IDs idénticos.
- * Devuelve un reporte con las diferencias encontradas y puede opcionalmente
- * sincronizar los usuarios faltantes.
- *
- * @param {Array}   devices          - Lista de dispositivos [{ name, ip, port }]
- * @param {Object}  [options]
- * @param {boolean} [options.fix=false] - Si es true, agrega los usuarios faltantes
- * @returns {Object} { consistent, devices, masterList, missing, synced }
- */
-async function validateUsersAcrossDevices(devices, options = {}) {
-  const { fix = false } = options;
-
-  // 1. Leer usuarios de todos los dispositivos
-  const deviceUsers = {};
-  for (const dev of devices) {
-    const users = await getUsers(dev);
-    deviceUsers[dev.name] = { device: dev, users };
-  }
-
-  // 2. Construir lista maestra (unión de todos los usuarios por ID)
-  const masterMap = new Map();
-  for (const [deviceName, { users }] of Object.entries(deviceUsers)) {
-    for (const u of users) {
-      if (!masterMap.has(u.userId)) {
-        masterMap.set(u.userId, { userId: u.userId, name: u.name, presentIn: [] });
-      }
-      masterMap.get(u.userId).presentIn.push(deviceName);
-    }
-  }
-
-  const masterList = Array.from(masterMap.values()).sort(
-    (a, b) => parseInt(a.userId) - parseInt(b.userId)
-  );
-
-  // 3. Detectar faltantes por dispositivo
-  const deviceNames = devices.map((d) => d.name);
-  const missing = {};
-  let consistent = true;
-
-  for (const devName of deviceNames) {
-    const deviceIdSet = new Set(deviceUsers[devName].users.map((u) => u.userId));
-    const faltantes = masterList.filter((u) => !deviceIdSet.has(u.userId));
-    missing[devName] = faltantes;
-    if (faltantes.length > 0) consistent = false;
-  }
-
-  // 4. Si fix=true, sincronizar usuarios faltantes
-  const synced = {};
-  if (fix) {
-    for (const devName of deviceNames) {
-      synced[devName] = [];
-      const dev = deviceUsers[devName].device;
-      for (const u of missing[devName]) {
-        await setUser(dev, { uid: u.userId, userid: u.userId, name: u.name });
-        synced[devName].push(u);
-      }
-    }
-  }
-
-  return { consistent, devices: deviceNames, masterList, missing, synced };
-}
-
-/**
  * Lee los templates de huellas digitales de un usuario especifico.
  * Usa CMD_USERTEMP_RRQ (9) a bajo nivel: uid(2 bytes LE) + finger(1 byte).
  *
@@ -209,4 +146,4 @@ async function getUserFingerprints(deviceConfig, uid) {
   });
 }
 
-module.exports = { getDeviceInfo, getAttendanceLogs, getUsers, setUser, validateUsersAcrossDevices, getUserFingerprints };
+module.exports = { getDeviceInfo, getAttendanceLogs, getUsers, setUser, getUserFingerprints };

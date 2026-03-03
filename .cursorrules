@@ -30,7 +30,7 @@ src/
 ├── sync/
 │   └── attendance.js   # Lógica core: obtener logs ZKTeco → filtrar nuevos → crear/cerrar asistencias en Odoo
 └── zkteco/
-    └── client.js       # Wrapper zkteco-js: getAttendanceLogs, getUsers, setUser, validateUsersAcrossDevices
+    └── client.js       # Wrapper zkteco-js: getAttendanceLogs, getUsers, setUser, getUserFingerprints
 ```
 
 ## Flujo de Sincronización
@@ -97,6 +97,7 @@ docker compose up -d
 
 ## Consideraciones Importantes
 
+- **Fuente de verdad:** La lista de empleados/usuarios en los checadores proviene solo de Odoo (enrollment). No se sincronizan usuarios entre dispositivos.
 - Los dispositivos ZKTeco se conectan via TCP directo — requieren acceso de red al IP del checador
 - La librería `zkteco-js` puede lanzar excepciones no atrapadas internamente — manejar con cuidado
 - El campo `x_zkteco_user_id` debe existir en Odoo antes de usar el sync (se crea via Odoo Studio o script)

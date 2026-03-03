@@ -45,6 +45,8 @@ El servicio actúa como puente bidireccional:
 - **Odoo → ZKTeco**: Registra empleados nuevos en los checadores (enrollment)
 - **ZKTeco → Odoo**: Lee registros de asistencia y crea check-in/check-out en Odoo
 
+**Fuente de verdad:** La lista de empleados y usuarios en los checadores proviene únicamente de Odoo. No se sincronizan usuarios entre dispositivos; cada checador se actualiza desde Odoo mediante el proceso de enrollment (manual o automático).
+
 ### Stack Tecnológico
 
 | Componente | Tecnología |
@@ -163,6 +165,7 @@ HEALTH_PORT=3000
 | `SYNC_INTERVAL` | No | `*/30 * * * *` | Expresión cron para sync de asistencia |
 | `ENROLL_INTERVAL` | No | `0 8 * * 2` | Expresión cron para enrollment semanal |
 | `TIMEZONE` | No | `America/Mexico_City` | Zona horaria de los dispositivos |
+| `CRON_ENABLED` | No | `true` | `0` o `false` para desactivar crons (sync y enrollment automáticos); el health check sigue activo |
 | `LOG_LEVEL` | No | `info` | Nivel de log: `debug`, `info`, `warn`, `error` |
 | `LOG_PATH` | No | — | Si se define, se escribe log a archivo con rotación (ej. `/var/log/odoo-checador/app.log`) |
 | `LOG_MAX_SIZE` | No | `10m` | Tamaño máximo por archivo antes de rotar (ej. `20m`) |
@@ -265,12 +268,6 @@ node scripts/dry-run-enrollment.js
 
 # Asistencia — Qué checadas se sincronizarían
 node scripts/dry-run-attendance.js
-
-# Sincronización entre dispositivos — Diferencias de usuarios entre checadores
-node scripts/dry-run-sync-devices.js
-
-# Sincronización entre dispositivos — Corregir diferencias
-node scripts/dry-run-sync-devices.js --fix
 ```
 
 ### Respaldo de Huellas
@@ -290,6 +287,19 @@ fingerprints/
   782-martinez-mendez-juan-cristobal.json
   783-andrade-gutierrez-enrique.json
   ...
+```
+
+### Otros scripts
+
+```bash
+# Ejecutar un solo ciclo de sincronización de asistencia (sin esperar al cron)
+node scripts/run-sync.js
+
+# Restaurar usuarios en dispositivos desde un respaldo previo
+node scripts/restore-device-users.js
+
+# Limpiar datos de un dispositivo ZKTeco (usuarios/asistencia). Uso avanzado.
+node scripts/clear-device.js --device "Oficina Principal"
 ```
 
 ---
@@ -406,9 +416,11 @@ odoo-checador/
 ├── scripts/
 │   ├── dry-run-enrollment.js    # Preview cruce Odoo ↔ ZKTeco
 │   ├── dry-run-attendance.js    # Preview de checadas pendientes
-│   ├── dry-run-sync-devices.js  # Diferencias entre dispositivos
 │   ├── enroll-employees.js      # Enrollment manual (--dry-run / real)
-│   └── backup-fingerprints.js   # Respaldo de huellas digitales
+│   ├── backup-fingerprints.js   # Respaldo de huellas digitales
+│   ├── run-sync.js              # Ejecuta un ciclo de sync de asistencia (sin cron)
+│   ├── restore-device-users.js  # Restaura usuarios en dispositivos desde respaldo
+│   └── clear-device.js          # Limpia usuarios/asistencia de un dispositivo (uso avanzado)
 ├── fingerprints/                # Respaldos de huellas (gitignored)
 ├── Dockerfile
 ├── docker-compose.yml
@@ -417,6 +429,8 @@ odoo-checador/
 ├── package.json
 └── README.md
 ```
+
+No se versionan (ver `.gitignore`): `node_modules/`, `.env`, `logs/`, `*.db`, `fingerprints/`, reportes generados y archivos de IDE/OS.
 
 ### Módulos Principales
 
@@ -440,7 +454,6 @@ odoo-checador/
 | `getAttendanceLogs(config)` | Lee registros de asistencia |
 | `getUsers(config)` | Lista usuarios registrados |
 | `setUser(config, userData)` | Registra un usuario |
-| `validateUsersAcrossDevices(devices, opts)` | Compara y sincroniza usuarios entre dispositivos |
 | `getUserFingerprints(config, uid)` | Lee templates de huellas (10 dedos) |
 
 ---

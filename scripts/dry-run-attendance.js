@@ -7,8 +7,6 @@
  * Uso: node scripts/dry-run-attendance.js
  */
 
-process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-
 const path = require('path');
 require('dotenv').config({ path: path.resolve(__dirname, '..', '.env') });
 

@@ -46,6 +46,7 @@ const config = {
     maxFiles: process.env.LOG_MAX_FILES || '7d',
   },
   healthPort: parseInt(process.env.HEALTH_PORT, 10) || 3000,
+  cronEnabled: process.env.CRON_ENABLED !== '0' && process.env.CRON_ENABLED !== 'false',
 };
 
 module.exports = config;
