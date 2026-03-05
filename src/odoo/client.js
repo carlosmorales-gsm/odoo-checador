@@ -79,7 +79,7 @@ class OdooClient {
   }
 
   async getLastOpenAttendance(employeeId) {
-    const cutoff = new Date(Date.now() - 48 * 60 * 60 * 1000)
+    const cutoff = new Date(Date.now() - 168 * 60 * 60 * 1000)
       .toISOString().replace('T', ' ').substring(0, 19);
 
     const ids = await this._call('hr.attendance', 'search', [

@@ -61,6 +61,16 @@ function isAlreadySynced(deviceIp, zkUserId, timestamp) {
   return !!row;
 }
 
+function getLastSyncLogForUser(deviceIp, zkUserId) {
+  const row = db.prepare(`
+    SELECT timestamp FROM sync_log
+    WHERE device_ip = ? AND zk_user_id = ? AND action != 'skipped_duplicate'
+    ORDER BY timestamp DESC
+    LIMIT 1
+  `).get(deviceIp, zkUserId);
+  return row ? row.timestamp : null;
+}
+
 function getAllSyncStates() {
   return db.prepare('SELECT device_ip, last_synced_timestamp FROM sync_state ORDER BY device_ip').all();
 }
@@ -115,5 +125,5 @@ function close() {
 
 module.exports = {
   init, getLastSyncedTimestamp, setLastSyncedTimestamp, logSync, isAlreadySynced,
-  getAllSyncStates, deleteSyncState, getSyncLogs, getSyncStats, close,
+  getLastSyncLogForUser, getAllSyncStates, deleteSyncState, getSyncLogs, getSyncStats, close,
 };

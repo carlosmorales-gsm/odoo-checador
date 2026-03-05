@@ -36,6 +36,9 @@ const config = {
   sync: {
     interval: process.env.SYNC_INTERVAL || '*/30 * * * *',
     timezone: process.env.TIMEZONE || 'America/Mexico_City',
+    dedupMinutes: parseInt(process.env.DEDUP_MINUTES, 10) || 10,
+    staleThresholdHours: parseInt(process.env.STALE_THRESHOLD_HOURS, 10) || 16,
+    autoCloseHours: parseInt(process.env.AUTO_CLOSE_HOURS, 10) || 8,
   },
   enroll: {
     interval: process.env.ENROLL_INTERVAL || '0 8 * * 2',

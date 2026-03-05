@@ -109,6 +109,29 @@ function toUTC(localDateStr, timezone) {
   }
 }
 
+/** Difference in minutes between two "YYYY-MM-DD HH:mm:ss" strings (both in the same timezone). */
+function diffMinutes(tsA, tsB) {
+  const a = new Date(tsA.replace(' ', 'T') + 'Z');
+  const b = new Date(tsB.replace(' ', 'T') + 'Z');
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return Infinity;
+  return Math.abs(a.getTime() - b.getTime()) / 60_000;
+}
+
+/** Difference in hours between two UTC "YYYY-MM-DD HH:mm:ss" strings. */
+function diffHoursUTC(utcA, utcB) {
+  const a = new Date(utcA.replace(' ', 'T') + 'Z');
+  const b = new Date(utcB.replace(' ', 'T') + 'Z');
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return Infinity;
+  return Math.abs(a.getTime() - b.getTime()) / 3_600_000;
+}
+
+/** Add hours to a UTC "YYYY-MM-DD HH:mm:ss" string and return the same format. */
+function addHoursUTC(utcStr, hours) {
+  const d = new Date(utcStr.replace(' ', 'T') + 'Z');
+  d.setTime(d.getTime() + hours * 3_600_000);
+  return d.toISOString().replace('T', ' ').substring(0, 19);
+}
+
 async function syncDevice(device, odoo) {
   const deviceLabel = `${device.name} (${device.ip})`;
   logger.info(`Connecting to ${deviceLabel}...`);
@@ -178,6 +201,18 @@ async function syncDevice(device, odoo) {
     }
 
     try {
+      // --- Dedup: skip if same user on same device checked within DEDUP_MINUTES ---
+      const lastUserTs = stateDb.getLastSyncLogForUser(device.ip, log.userId);
+      if (lastUserTs && diffMinutes(log.timestamp, lastUserTs) < config.sync.dedupMinutes) {
+        const gap = diffMinutes(log.timestamp, lastUserTs).toFixed(1);
+        logger.warn(`Duplicate skipped: user ${log.userId}, ${gap} min since last record`);
+        stateDb.logSync(device.ip, log.userId, log.timestamp, 'skipped_duplicate', null);
+        if (!encounteredError && (!latestTimestamp || log.timestamp > latestTimestamp)) {
+          latestTimestamp = log.timestamp;
+        }
+        continue;
+      }
+
       // Look up employee
       let employee = employeeCache.get(log.userId);
       if (employee === undefined) {
@@ -205,11 +240,25 @@ async function syncDevice(device, odoo) {
         action = 'check_in';
         logger.debug(`Check-in: ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
       } else {
-        // Open attendance exists → close it with check-out
-        await odoo.updateCheckOut(openAttendance.id, utcTimestamp);
-        odooAttendanceId = openAttendance.id;
-        action = 'check_out';
-        logger.debug(`Check-out: ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
+        const hoursOpen = diffHoursUTC(utcTimestamp, openAttendance.check_in);
+
+        if (hoursOpen > config.sync.staleThresholdHours) {
+          // Stale attendance: auto-close at check_in + AUTO_CLOSE_HOURS, then open new
+          const autoCloseTs = addHoursUTC(openAttendance.check_in, config.sync.autoCloseHours);
+          await odoo.updateCheckOut(openAttendance.id, autoCloseTs);
+          stateDb.logSync(device.ip, log.userId, log.timestamp, 'auto_close', openAttendance.id);
+          logger.info(`Auto-close: ${employee.name} attendance #${openAttendance.id} closed at ${autoCloseTs} (was open ${hoursOpen.toFixed(1)}h)`);
+
+          odooAttendanceId = await odoo.createCheckIn(employee.id, utcTimestamp);
+          action = 'check_in';
+          logger.debug(`Check-in (after auto-close): ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
+        } else {
+          // Normal check-out
+          await odoo.updateCheckOut(openAttendance.id, utcTimestamp);
+          odooAttendanceId = openAttendance.id;
+          action = 'check_out';
+          logger.debug(`Check-out: ${employee.name} at ${utcTimestamp} (attendance #${odooAttendanceId})`);
+        }
       }
 
       stateDb.logSync(device.ip, log.userId, log.timestamp, action, odooAttendanceId);

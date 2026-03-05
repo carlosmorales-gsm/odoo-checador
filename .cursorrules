@@ -43,9 +43,11 @@ src/
    a. Conectar al ZKTeco via TCP y obtener registros de asistencia
    b. Filtrar solo registros nuevos (posteriores al último `last_synced_timestamp` en SQLite)
    c. Para cada registro nuevo:
+      - **Dedup:** si el mismo usuario en el mismo dispositivo tiene un registro en sync_log a menos de `DEDUP_MINUTES` minutos, se descarta como `skipped_duplicate`
       - Buscar empleado en Odoo por `x_zkteco_user_id` (campo custom en `hr.employee`)
       - Si no hay asistencia abierta → `createCheckIn`
-      - Si hay asistencia abierta → `updateCheckOut`
+      - Si hay asistencia abierta y lleva menos de `STALE_THRESHOLD_HOURS` → `updateCheckOut`
+      - Si hay asistencia abierta y lleva más de `STALE_THRESHOLD_HOURS` → cerrar a check_in + `AUTO_CLOSE_HOURS` (`auto_close`) y crear nueva entrada
       - Registrar en `sync_log`
    d. Actualizar `last_synced_timestamp`
 
@@ -80,6 +82,9 @@ src/
 | `ZKTECO_DEVICES` | JSON array de dispositivos | `[{"name":"Oficina","ip":"10.0.0.100","port":4370}]` |
 | `SYNC_INTERVAL` | Expresión cron | `*/5 * * * *` |
 | `TIMEZONE` | Timezone de los dispositivos | `America/Mexico_City` |
+| `DEDUP_MINUTES` | Ventana de deduplicación: checadas del mismo usuario/dispositivo dentro de este lapso se ignoran | `10` |
+| `STALE_THRESHOLD_HOURS` | Horas para considerar una asistencia abierta como "vieja" y aplicar auto-cierre | `16` |
+| `AUTO_CLOSE_HOURS` | Horas después del check_in para el cierre provisional de asistencias viejas | `8` |
 | `BACKUP_INTERVAL` | Cron respaldo incremental de huellas (por defecto domingo 2:00) | `0 2 * * 0` |
 | `FINGERPRINT_SYNC_INTERVAL` | Cron sync huellas faltantes desde respaldo a cada checador (por defecto domingo 3:00) | `0 3 * * 0` |
 | `LOG_LEVEL` | Nivel de logging winston | `info` |

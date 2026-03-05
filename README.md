@@ -141,6 +141,11 @@ SYNC_INTERVAL=*/30 * * * *       # Sync de asistencia cada 30 minutos
 ENROLL_INTERVAL=0 8 * * 2        # Enrollment cada martes a las 8am
 TIMEZONE=America/Mexico_City
 
+# ── Dedup y auto-cierre ──────────────────────────────────────────────
+# DEDUP_MINUTES=10               # Ignorar checada si hay otra del mismo usuario/dispositivo en menos de 10 min
+# STALE_THRESHOLD_HOURS=16       # Si la asistencia abierta tiene más de 16h, auto-cerrar
+# AUTO_CLOSE_HOURS=8             # Cerrar asistencia vieja a check_in + 8h
+
 # ── TLS (solo para instancias .dev.odoo.com) ─────────────────────────
 # NODE_TLS_REJECT_UNAUTHORIZED=0
 
@@ -165,6 +170,9 @@ HEALTH_PORT=3000
 | `SYNC_INTERVAL` | No | `*/30 * * * *` | Expresión cron para sync de asistencia |
 | `ENROLL_INTERVAL` | No | `0 8 * * 2` | Expresión cron para enrollment semanal |
 | `TIMEZONE` | No | `America/Mexico_City` | Zona horaria de los dispositivos |
+| `DEDUP_MINUTES` | No | `10` | Ventana de deduplicación: checadas del mismo usuario/dispositivo dentro de este lapso se ignoran |
+| `STALE_THRESHOLD_HOURS` | No | `16` | Horas para considerar una asistencia abierta como "vieja" y aplicar auto-cierre |
+| `AUTO_CLOSE_HOURS` | No | `8` | Horas después del check_in para el cierre provisional de asistencias viejas |
 | `CRON_ENABLED` | No | `true` | `0` o `false` para desactivar crons (sync y enrollment automáticos); el health check sigue activo |
 | `LOG_LEVEL` | No | `info` | Nivel de log: `debug`, `info`, `warn`, `error` |
 | `LOG_PATH` | No | — | Si se define, se escribe log a archivo con rotación (ej. `/var/log/odoo-checador/app.log`) |
