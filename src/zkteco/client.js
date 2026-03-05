@@ -357,4 +357,17 @@ async function deleteUserFingerprintsByFinger(device, userId) {
   await device.executeCmd(CMD_REFRESHDATA, Buffer.alloc(0));
 }
 
-module.exports = { getDeviceInfo, getAttendanceLogs, getUsers, setUser, getUserFingerprints, clearDevice, freeData, setUserFingerprints, deleteUserFingerprints };
+/**
+ * Elimina un usuario del dispositivo (registro de usuario). Borra huellas y registro.
+ * Para solo borrar huellas use deleteUserFingerprints.
+ *
+ * @param {Object} deviceConfig - { ip, port, name }
+ * @param {number|string} uid - uid interno del usuario en el dispositivo (slot)
+ */
+async function deleteUser(deviceConfig, uid) {
+  return withDevice(deviceConfig, async (device) => {
+    await device.deleteUser(parseInt(uid, 10));
+  });
+}
+
+module.exports = { getDeviceInfo, getAttendanceLogs, getUsers, setUser, getUserFingerprints, clearDevice, freeData, setUserFingerprints, deleteUserFingerprints, deleteUser };

@@ -299,7 +299,7 @@ node scripts/enroll-employees.js
 
 ```bash
 # Enrollment — Cruce completo Odoo vs ZKTeco con plan detallado
-node scripts/dry-run-enrollment.js
+node scripts/verify-employee-checador.js
 
 # Asistencia — Qué checadas se sincronizarían
 node scripts/dry-run-attendance.js
@@ -359,6 +359,10 @@ node scripts/restore-device-users.js
 
 # Limpiar datos de un dispositivo ZKTeco (usuarios/asistencia). Uso avanzado.
 node scripts/clear-device.js --device "Oficina Principal"
+
+# Eliminar un usuario de los checadores (huellas + registro). --dry-run para preview.
+node scripts/delete-user-from-checador.js --id 801 --dry-run
+node scripts/delete-user-from-checador.js --id 801 --device "Fune Zapata"
 ```
 
 ---
@@ -372,11 +376,11 @@ Completar las credenciales de Odoo y las IPs de los dispositivos ZKTeco.
 ### Paso 2: Verificar conectividad
 
 ```bash
-# Verificar que Odoo y ZKTeco responden
-node scripts/dry-run-enrollment.js
+# Verificar que Odoo y ZKTeco responden (empleados en checador + huellas)
+node scripts/verify-employee-checador.js
 ```
 
-Debe mostrar la lista de empleados de Odoo y el estado de cada dispositivo ZKTeco.
+Debe mostrar empleados Odoo con barcode y por cada checador si están en el dispositivo y si tienen huellas.
 
 ### Paso 3: Preview de enrollment
 
@@ -397,10 +401,10 @@ Esto registra los empleados en los checadores y escribe los barcodes en Odoo. **
 ### Paso 5: Verificar resultado
 
 ```bash
-node scripts/dry-run-enrollment.js
+node scripts/verify-employee-checador.js
 ```
 
-Ahora debería mostrar que todos los empleados tienen barcode y están en los dispositivos.
+Ahora debería mostrar que los empleados tienen barcode, están en los checadores y (si aplica) cuántas huellas tienen.
 
 ### Paso 6: Arrancar el servicio
 
@@ -475,7 +479,7 @@ odoo-checador/
 │   └── zkteco/
 │       └── client.js            # Wrapper de comunicación ZKTeco
 ├── scripts/
-│   ├── dry-run-enrollment.js    # Preview cruce Odoo ↔ ZKTeco
+│   ├── verify-employee-checador.js  # Verificar empleado Odoo en checador y si tiene huellas
 │   ├── dry-run-attendance.js    # Preview de checadas pendientes
 │   ├── dry-run-reprovision.js    # Preview reprovisionado (checador nuevo: clear → Odoo → huellas)
 │   ├── dry-run-fingerprint-sync.js  # Preview sync huellas faltantes (sin escribir en dispositivos)
@@ -483,6 +487,7 @@ odoo-checador/
 │   ├── backup-fingerprints.js   # Respaldo de huellas (incremental por defecto, --force para sobrescribir)
 │   ├── run-sync.js              # Ejecuta un ciclo de sync de asistencia (sin cron)
 │   ├── restore-device-users.js  # Restaura usuarios en dispositivos desde respaldo
+│   ├── delete-user-from-checador.js  # Elimina un usuario de checador(es) (--id, --dry-run)
 │   └── clear-device.js          # Limpia usuarios/asistencia de un dispositivo (uso avanzado)
 ├── fingerprints/                # Respaldos de huellas (gitignored)
 ├── patches/                     # Parches a dependencias (patch-package)

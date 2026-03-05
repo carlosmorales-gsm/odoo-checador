@@ -27,8 +27,41 @@ function nowInDeviceTz(timezone) {
 
 function toUTC(localDateStr, timezone) {
   // localDateStr comes from ZKTeco as "YYYY-MM-DD HH:mm:ss" in device-local time.
+  if (!localDateStr || typeof localDateStr !== 'string') {
+    throw new Error(`toUTC: invalid localDateStr (${typeof localDateStr})`);
+  }
+
+  /** Fallback when Intl path fails (e.g. ICU/timezone on Raspberry Pi): parse and apply fixed offset. */
+  function fallbackMexicoCity() {
+    const trimmed = localDateStr.trim();
+    const m = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2}) (\d{1,2}):(\d{1,2}):(\d{1,2})$/);
+    if (!m) throw new Error(`toUTC: invalid format (expected YYYY-MM-DD HH:mm:ss): ${localDateStr}`);
+    const [, y, mo, d, h, mi, s] = m;
+    const localAsUtc = Date.UTC(
+      parseInt(y, 10), parseInt(mo, 10) - 1, parseInt(d, 10),
+      parseInt(h, 10), parseInt(mi, 10), parseInt(s, 10)
+    );
+    // America/Mexico_City = UTC-6 → UTC = local + 6h
+    const utcDate = new Date(localAsUtc + 6 * 60 * 60 * 1000);
+    if (isNaN(utcDate.getTime())) throw new Error(`toUTC: fallback produced invalid date for ${localDateStr}`);
+    return utcDate.toISOString().replace('T', ' ').substring(0, 19);
+  }
+
+  /** Use fallback whenever Intl fails (invalid tzDisplay/utcDate or missing parts). Does not depend on exact TIMEZONE string. */
+  function useFallbackIfPossible() {
+    if (/^\d{4}-\d{1,2}-\d{1,2} \d{1,2}:\d{1,2}:\d{1,2}$/.test(localDateStr.trim())) {
+      return fallbackMexicoCity();
+    }
+    return null;
+  }
+
   // Append 'Z' to treat the string as an anchor in UTC for offset calculation.
   const anchor = new Date(localDateStr.replace(' ', 'T') + 'Z');
+  if (isNaN(anchor.getTime())) {
+    const fallback = useFallbackIfPossible();
+    if (fallback !== null) return fallback;
+    throw new Error(`toUTC: could not parse date: ${localDateStr}`);
+  }
 
   const formatter = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
@@ -39,17 +72,41 @@ function toUTC(localDateStr, timezone) {
 
   const parts = formatter.formatToParts(anchor);
   const get = (type) => parts.find((p) => p.type === type)?.value;
+  const y = get('year'), mo = get('month'), d = get('day');
+  const h = get('hour'), mi = get('minute'), s = get('second');
+
+  if (!y || !mo || !d || h === undefined || h === '' || !mi || !s) {
+    const fallback = useFallbackIfPossible();
+    if (fallback !== null) return fallback;
+    throw new Error(`toUTC: formatToParts missing parts (tz=${timezone})`);
+  }
 
   // Reconstruct the timezone-shifted wall-clock time as a UTC Date to find the offset.
-  // For UTC-6: anchor=08:30Z → formatter shows 02:30 → tzDisplay=02:30Z → offsetMs=-6h
   const tzDisplay = new Date(
-    `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}Z`
+    `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}T${String(h).padStart(2, '0')}:${String(mi).padStart(2, '0')}:${String(s).padStart(2, '0')}Z`
   );
-  const offsetMs = tzDisplay.getTime() - anchor.getTime();
+  if (isNaN(tzDisplay.getTime())) {
+    const fallback = useFallbackIfPossible();
+    if (fallback !== null) return fallback;
+    throw new Error(`toUTC: invalid tzDisplay (input: ${localDateStr})`);
+  }
 
-  // UTC = device_local_as_UTC - offsetMs → 08:30Z - (-6h) = 14:30Z
+  const offsetMs = tzDisplay.getTime() - anchor.getTime();
   const utcDate = new Date(anchor.getTime() - offsetMs);
-  return utcDate.toISOString().replace('T', ' ').substring(0, 19);
+
+  if (isNaN(utcDate.getTime())) {
+    const fallback = useFallbackIfPossible();
+    if (fallback !== null) return fallback;
+    throw new Error(`toUTC: invalid utcDate (input: ${localDateStr})`);
+  }
+
+  try {
+    return utcDate.toISOString().replace('T', ' ').substring(0, 19);
+  } catch (e) {
+    const fallback = useFallbackIfPossible();
+    if (fallback !== null) return fallback;
+    throw e;
+  }
 }
 
 async function syncDevice(device, odoo) {
